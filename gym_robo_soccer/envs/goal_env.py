@@ -115,7 +115,6 @@ class GoalEnv(gym.Env):
         act = ACTION_LOOKUP[act_index]
         param = action[1][act_index]
         param = np.clip(param, PARAMETERS_MIN[act_index], PARAMETERS_MAX[act_index])
-
         steps = 0
         self.time += 1
         if self.time == self.max_time:
@@ -492,6 +491,7 @@ class GoalEnv(gym.Env):
         self.render_states = []  # clear states for next render
 
     def render(self, mode='human', close=False):
+        print("afsfa")
         if close:
             pygame.display.quit()
             pygame.quit()

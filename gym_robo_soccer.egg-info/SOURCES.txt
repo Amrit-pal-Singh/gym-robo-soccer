@@ -1,0 +1,8 @@
+README.md
+setup.py
+gym_robo_soccer/__init__.py
+gym_robo_soccer.egg-info/PKG-INFO
+gym_robo_soccer.egg-info/SOURCES.txt
+gym_robo_soccer.egg-info/dependency_links.txt
+gym_robo_soccer.egg-info/requires.txt
+gym_robo_soccer.egg-info/top_level.txt
