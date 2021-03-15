@@ -53,3 +53,17 @@ SHIFT_VECTOR = np.array([0.0, PITCH_WIDTH / 2, 1.0, 1.0, np.pi,
                          0.0, PITCH_WIDTH / 2, 3, 3])
 LOW_VECTOR = -SHIFT_VECTOR
 HIGH_VECTOR = np.array(SCALE_VECTOR-SHIFT_VECTOR)
+
+PLAYER_POSITIONS = [[PITCH_LENGTH/2-31.0, 0.0], 
+                    [PITCH_LENGTH/2-31.0, 10.0],
+                    [PITCH_LENGTH/2-31.0, -10.0],
+                    [PITCH_LENGTH/2-41.0, 0.0],
+                    [PITCH_LENGTH/2-41.0, 10.0],
+                    [PITCH_LENGTH/2-41.0, -10.0]]
+
+OPPONENT_PLAYER_POSITIONS = [[PITCH_LENGTH/2-21.0, 0.0], 
+                            [PITCH_LENGTH/2-21.0, 10.0],
+                            [PITCH_LENGTH/2-21.0, -10.0],
+                            [PITCH_LENGTH/2-11.0, 0.0],
+                            [PITCH_LENGTH/2-11.0, 10.0],
+                            [PITCH_LENGTH/2-11.0, -10.0]]

@@ -15,7 +15,8 @@ from gym.utils import seeding
 import sys
 from .config import PLAYER_CONFIG, BALL_CONFIG, GOAL_AREA_LENGTH, GOAL_AREA_WIDTH, GOAL_WIDTH, GOAL_DEPTH, KICKABLE, \
     INERTIA_MOMENT, MINPOWER, MAXPOWER, PITCH_LENGTH, PITCH_WIDTH, CATCHABLE, CATCH_PROBABILITY, SHIFT_VECTOR, \
-    SCALE_VECTOR, LOW_VECTOR, HIGH_VECTOR, PITCH_START, SPEED_PLAYER, SPEED_GOALIE1, SPEED_GOALIE2, OPPONENT_SPEED
+    SCALE_VECTOR, LOW_VECTOR, HIGH_VECTOR, PITCH_START, SPEED_PLAYER, SPEED_GOALIE1, SPEED_GOALIE2, OPPONENT_SPEED, PLAYER_POSITIONS, \
+    OPPONENT_PLAYER_POSITIONS
 from .util import bound, bound_vector, angle_position, angle_between, angle_difference, angle_close, norm_angle, \
     vector_to_tuple
 
@@ -207,12 +208,12 @@ class GoalEnv(gym.Env):
     def reset(self):
         # TODO: implement reset for each entity to avoid creating new objects and reduce duplicate code
         for i in range(self.n_of_player):
-            initial_player = np.array((random.randint(-8, 8) + 10, self.np_random.uniform(-PITCH_WIDTH / 2 + 2, PITCH_WIDTH / 2 - 2)))
+            initial_player = np.array(PLAYER_POSITIONS[i])
             angle = angle_between(initial_player, np.array((PITCH_LENGTH / 2, 0)))
             self.player.append(Player(initial_player, angle))
 
         for i in range(self.n_of_opp_players):
-            opponent_player_pos = np.array((PITCH_LENGTH/2 + -10 + random.randint(-8, 8) , self.np_random.uniform(-PITCH_WIDTH / 2 + 2, PITCH_WIDTH / 2 - 2)))
+            opponent_player_pos = np.array(OPPONENT_PLAYER_POSITIONS[i])
             angle_opp = angle_between(opponent_player_pos, np.array((PITCH_START, 0)))
             self.opponent_player.append(Player(opponent_player_pos, angle_opp))
 

@@ -6,8 +6,8 @@ import numpy as np
 from gym_robo_soccer.envs.goal_env import GoalEnv
 
 # env = gym.make('Goal-v0')
-TEAM1_PLAYERS = 4
-TEAM2_PLAYERS = 3
+TEAM1_PLAYERS = 6
+TEAM2_PLAYERS = 6
 env = GoalEnv(TEAM1_PLAYERS, TEAM2_PLAYERS)
 
 
