@@ -7,6 +7,7 @@ June 2018
 """
 import numpy as np
 import math
+import random
 import gym
 import pygame
 from gym import spaces, error
@@ -14,24 +15,23 @@ from gym.utils import seeding
 import sys
 from .config import PLAYER_CONFIG, BALL_CONFIG, GOAL_AREA_LENGTH, GOAL_AREA_WIDTH, GOAL_WIDTH, GOAL_DEPTH, KICKABLE, \
     INERTIA_MOMENT, MINPOWER, MAXPOWER, PITCH_LENGTH, PITCH_WIDTH, CATCHABLE, CATCH_PROBABILITY, SHIFT_VECTOR, \
-    SCALE_VECTOR, LOW_VECTOR, HIGH_VECTOR, PITCH_START, SPEED_PLAYER, SPEED_GOALIE1, SPEED_GOALIE2
+    SCALE_VECTOR, LOW_VECTOR, HIGH_VECTOR, PITCH_START, SPEED_PLAYER, SPEED_GOALIE1, SPEED_GOALIE2, OPPONENT_SPEED
 from .util import bound, bound_vector, angle_position, angle_between, angle_difference, angle_close, norm_angle, \
     vector_to_tuple
 
 # actions
-KICK = "kick"
-DASH = "dash"
-TURN = "turn"
-TO_BALL = "toball"
-SHOOT_GOAL = "shootgoal"
-TURN_BALL = "turnball"
-DRIBBLE = "dribble"
-KICK_TO = "kickto"
+KICK = "kick"               # Kicks the ball
+DASH = "dash"               # accelerate
+TURN = "turn"               # 
+TO_BALL = "toball"          # if not facing ball, face it. If cannot kick, dash toward ball.
+SHOOT_GOAL = "shootgoal"    # Shoot the goal at a targeted position on the goal line
+TURN_BALL = "turnball"      # 
+DRIBBLE = "dribble"         # Dribble the ball to a position, change direction of ball, then kick toward a target position.
+KICK_TO = "kickto"          # Kick the ball to a target position.
 
 ACTION_LOOKUP = {
     0: KICK_TO,
-    1: SHOOT_GOAL,
-    2: SHOOT_GOAL,
+    1: SHOOT_GOAL
 }
 
 # field bounds seem to be 0, PITCH_LENGTH / 2, -PITCH_WIDTH / 2, PITCH_WIDTH / 2
@@ -60,17 +60,19 @@ class GoalEnv(gym.Env):
     _VISUALISER_SCALE_FACTOR = 20
     _VISUALISER_DELAY = 120  # fps
 
-    def __init__(self):
+    def __init__(self, number_of_players, number_of_opposite_players):
         """ The entities are set up and added to a space. """
 
         self.np_random = None
         self.entities = []
 
-        self.player = None
+        self.n_of_player = number_of_players
+        self.n_of_opp_players = number_of_opposite_players
+        self.player = []
         self.ball = None
         self.goalie = None
 
-        self.opponent_player = None
+        self.opponent_player = []
         self.opponent_goalie = None
 
         self.states = []
@@ -95,7 +97,22 @@ class GoalEnv(gym.Env):
 
         self.seed()
 
-    def step(self, action):
+    def external_input(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            self.opponent_player.position -= [OPPONENT_SPEED ,0] 
+            
+        if keys[pygame.K_RIGHT]: 
+            self.opponent_player.position += [OPPONENT_SPEED ,0] 
+            
+        if keys[pygame.K_UP]: 
+            self.opponent_player.position -= [0, OPPONENT_SPEED]
+                
+        if keys[pygame.K_DOWN]: 
+            self.opponent_player.position += [0, OPPONENT_SPEED]
+
+
+    def step(self, player_index, action):
         """
         Take a full, stabilised update.
 
@@ -125,18 +142,19 @@ class GoalEnv(gym.Env):
         end_episode = False
         run = True
         reward = 0.
+        self.external_input()
         while run:
             steps += 1
-            reward, end_episode = self._update(act, param)
+            reward, end_episode = self._update(player_index, act, param)
             run = not end_episode
             if run:
-                run = not self.player.can_kick(self.ball)
+                run = not self.player[player_index].can_kick(self.ball)
                 if act == DRIBBLE:
                     run = not self.ball.close_to(param) or run
                 elif act == KICK_TO:
                     run = norm(self.ball.velocity) > 0.1 or run
                 elif act == TURN_BALL:
-                    theta = angle_between(self.player.position, self.ball.position)
+                    theta = angle_between(self.player[player_index].position, self.ball.position)
                     run = not angle_close(theta, param[0]) or run
                 elif act == SHOOT_GOAL:
                     run = not end_episode
@@ -145,38 +163,58 @@ class GoalEnv(gym.Env):
         state = self.get_state()
         return (state, steps), reward, end_episode, {}
 
-    def _update(self, act, param):
+    def _update(self, player_index, act, param):
         """
         Performs a single transition with the given action,
         returns the reward and terminal status.
         """
+        player_position_states = []
+        player_orientation_states = []
+
+        opp_player_states = []
+        opp_player_orientation_states = []
+        for i in range(self.n_of_player):
+            player_position_states.append(self.player[i].position.copy())
+            player_orientation_states.append(self.player[i].orientation)
+        
+        for i in range(self.n_of_opp_players):
+            opp_player_states.append(self.opponent_player[i].position.copy())
+            opp_player_orientation_states.append(self.opponent_player[i].orientation)
+            
         self.states.append([
-            self.player.position.copy(),
-            self.player.orientation,
+            player_position_states,
+            player_orientation_states,
+            # self.player.orientation,
             self.goalie.position.copy(),
             self.goalie.orientation,
-            self.opponent_player.position.copy(),
-            self.opponent_player.orientation,
+            opp_player_states,
+            opp_player_orientation_states,
             self.opponent_goalie.position.copy(),
             self.opponent_goalie.orientation,
             self.ball.position.copy()])
         self.render_states.append(self.states[-1])
-        self._perform_action(act, param, self.player)
-        self.goalie.move(self.ball, self.player)
+        self._perform_action(act, param, self.player[player_index])
+        self.goalie.move(self.ball, self.player[player_index])
         for entity in self.entities:
-            entity.update()
+            if isinstance(entity, list):
+                for x in entity:
+                    x.update()
+            else:
+                entity.update()
         self._resolve_collisions()
         return self._terminal_check()
 
     def reset(self):
         # TODO: implement reset for each entity to avoid creating new objects and reduce duplicate code
-        initial_player = np.array((10, self.np_random.uniform(-PITCH_WIDTH / 2, PITCH_WIDTH / 2)))
-        angle = angle_between(initial_player, np.array((PITCH_LENGTH / 2, 0)))
-        self.player = Player(initial_player, angle)
+        for i in range(self.n_of_player):
+            initial_player = np.array((random.randint(-8, 8) + 10, self.np_random.uniform(-PITCH_WIDTH / 2 + 2, PITCH_WIDTH / 2 - 2)))
+            angle = angle_between(initial_player, np.array((PITCH_LENGTH / 2, 0)))
+            self.player.append(Player(initial_player, angle))
 
-        opponent_player_pos = np.array((PITCH_LENGTH/2 - 10, self.np_random.uniform(-PITCH_WIDTH / 2, PITCH_WIDTH / 2)))
-        angle_opp = angle_between(opponent_player_pos, np.array((PITCH_START, 0)))
-        self.opponent_player = Player(opponent_player_pos, angle_opp)
+        for i in range(self.n_of_opp_players):
+            opponent_player_pos = np.array((PITCH_LENGTH/2 + -10 + random.randint(-8, 8) , self.np_random.uniform(-PITCH_WIDTH / 2 + 2, PITCH_WIDTH / 2 - 2)))
+            angle_opp = angle_between(opponent_player_pos, np.array((PITCH_START, 0)))
+            self.opponent_player.append(Player(opponent_player_pos, angle_opp))
 
         MACHINE_EPSILON = 1e-12  # ensure always kickable on first state
         # fixes seeded runs changing between machines due to minor precision differences,
@@ -193,20 +231,33 @@ class GoalEnv(gym.Env):
         self.opponent_goalie = Goalie(opponent_player_pos, angle3)
 
         self.entities = [self.player, self.goalie, self.opponent_player, self.opponent_goalie, self.ball]
-        self._update_entity_seeds()
+        # self._update_entity_seeds()
 
         self.states = []
         self.render_states = []
 
         self.time = 0
 
+        player_position_states = []
+        player_orientation_states = []
+
+        opp_player_states = []
+        opp_player_orientation_states = []
+        for i in range(self.n_of_player):
+            player_position_states.append(self.player[i].position.copy())
+            player_orientation_states.append(self.player[i].orientation)
+        
+        for i in range(self.n_of_opp_players):
+            opp_player_states.append(self.opponent_player[i].position.copy())
+            opp_player_orientation_states.append(self.opponent_player[i].orientation)
+            
         self.states.append([
-            self.player.position.copy(),
-            self.player.orientation,
+            player_position_states,
+            player_orientation_states,
             self.goalie.position.copy(),
             self.goalie.orientation,
-            self.opponent_player.position.copy(),
-            self.opponent_player.orientation,
+            opp_player_states,
+            opp_player_orientation_states,
             self.opponent_goalie.position.copy(),
             self.opponent_goalie.orientation,
             self.ball.position.copy()])
@@ -223,7 +274,11 @@ class GoalEnv(gym.Env):
     def _update_entity_seeds(self):
         # will be empty at initialisation, call again after creating all entities
         for entity in self.entities:
-            entity.np_random = self.np_random
+            if isinstance(entity, list): 
+                for x in entity:
+                    x.np_random = self.np_random
+            else:
+                entity.np_random = self.np_random
 
     @staticmethod
     def _keeper_line(ball):
@@ -253,23 +308,23 @@ class GoalEnv(gym.Env):
 
     def get_state(self):
         """ Returns the representation of the current state. """
-        state = np.concatenate((
-            self.player.position,
-            self.player.velocity,
-            [self.player.orientation],
-            self.goalie.position,
-            self.goalie.velocity,
-            [self.goalie.orientation],
-            self.opponent_player.position,
-            self.opponent_player.velocity,
-            [self.opponent_player.orientation],
-            self.opponent_goalie.position,
-            self.opponent_goalie.velocity,
-            [self.opponent_goalie.orientation],
-            self.ball.position,
-            self.ball.velocity))
+        # state = np.concatenate((
+        #     self.player.position,
+        #     self.player.velocity,
+        #     [self.player.orientation],
+        #     self.goalie.position,
+        #     self.goalie.velocity,
+        #     [self.goalie.orientation],
+        #     self.opponent_player.position,
+        #     self.opponent_player.velocity,
+        #     [self.opponent_player.orientation],
+        #     self.opponent_goalie.position,
+        #     self.opponent_goalie.velocity,
+        #     [self.opponent_goalie.orientation],
+        #     self.ball.position,
+        #     self.ball.velocity))
         #return self.scale_state(state)
-        return state
+        return None
 
     def _load_from_state(self, state):
         assert len(state) == len(self.get_state())
@@ -312,9 +367,25 @@ class GoalEnv(gym.Env):
     def _resolve_collisions(self):
         """ Shift apart all colliding entities with one pass. """
         for index, entity1 in enumerate(self.entities):
-            for entity2 in self.entities[index + 1:]:
-                if entity1.colliding(entity2):
-                    entity1.decollide(entity2)
+            if isinstance(entity1, list):
+                for x in entity1:
+                    for entity2 in self.entities[index + 1:]:
+                        if isinstance(entity2, list):
+                            for y in entity2:
+                                if x.colliding(y):
+                                    x.decollide(y)
+                        else:
+                            if x.colliding(entity2):
+                                x.decollide(entity2)
+            else:  
+                for entity2 in self.entities[index + 1:]:
+                    if isinstance(entity2, list):
+                        for y in entity2:
+                            if entity1.colliding(y):
+                                entity1.decollide(y)
+                    else:
+                        if entity1.colliding(entity2):
+                            entity1.decollide(entity2)
 
     def _terminal_check(self):
         """ Determines if the episode is ended, and the reward. """
@@ -327,14 +398,26 @@ class GoalEnv(gym.Env):
         else:
             end_episode = False
             reward = 0
+        player_position_states = []
+        player_orientation_states = []
+
+        opp_player_states = []
+        opp_player_orientation_states = []
+        for i in range(self.n_of_player):
+            player_position_states.append(self.player[i].position.copy())
+            player_orientation_states.append(self.player[i].orientation)
+        for i in range(self.n_of_opp_players):
+            opp_player_states.append(self.opponent_player[i].position.copy())
+            opp_player_orientation_states.append(self.opponent_player[i].orientation)
         if end_episode:
             self.states.append([
-                self.player.position.copy(),
-                self.player.orientation,
+                player_position_states,
+                player_orientation_states,
+                # self.player.orientation,
                 self.goalie.position.copy(),
                 self.goalie.orientation,
-                self.opponent_player.position.copy(),
-                self.opponent_player.orientation,
+                opp_player_states,
+                opp_player_orientation_states,
                 self.opponent_goalie.position.copy(),
                 self.opponent_goalie.orientation,
                 self.ball.position.copy()])
@@ -360,12 +443,12 @@ class GoalEnv(gym.Env):
     def __draw_internal_state(self, internal_state, fade=False):
         """ Draw the field and players. """
 
-        player_position = internal_state[0]
-        player_orientation = internal_state[1]
+        player_positions = internal_state[0]
+        player_orientations = internal_state[1]
         goalie_position = internal_state[2]
         goalie_orientation = internal_state[3]
-        opponent_player_position = internal_state[4]
-        opponent_player_orientaion = internal_state[5]
+        opponent_player_positions = internal_state[4]
+        opponent_player_orientaions = internal_state[5]
         opponent_goalie_position = internal_state[6]
         opponent_goalie_orientaion = internal_state[7]
         ball_position = internal_state[8]
@@ -401,13 +484,14 @@ class GoalEnv(gym.Env):
 
         # self.draw_radius(vector(0, 0), CENTRE_CIRCLE_RADIUS)
         # Draw Players
-        self.__draw_player(player_position, player_orientation, self.__white)
-        if not fade:
-            self.__draw_radius(player_position, KICKABLE)
-
-        self.__draw_player(opponent_player_position, opponent_player_orientaion, self.__black)
-        if not fade:
-            self.__draw_radius(opponent_player_position, KICKABLE)
+        for i in range(self.n_of_player):
+            self.__draw_player(player_positions[i], player_orientations[i], self.__white)
+            if not fade:
+                self.__draw_radius(player_positions[i], KICKABLE)
+        for i in range(self.n_of_opp_players):
+            self.__draw_player(opponent_player_positions[i], opponent_player_orientaions[i], self.__black)
+            if not fade:
+                self.__draw_radius(opponent_player_positions[i], KICKABLE)
 
         self.__draw_player(goalie_position, goalie_orientation, self.__red)
         if not fade:
@@ -491,7 +575,6 @@ class GoalEnv(gym.Env):
         self.render_states = []  # clear states for next render
 
     def render(self, mode='human', close=False):
-        print("afsfa")
         if close:
             pygame.display.quit()
             pygame.quit()
